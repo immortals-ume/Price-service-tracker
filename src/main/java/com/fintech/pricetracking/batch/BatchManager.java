@@ -39,6 +39,14 @@ public interface BatchManager {
     void removeBatch(String batchId);
     
     /**
+     * Removes a batch from management with a specific status.
+     * 
+     * @param batchId the batch identifier
+     * @param cancelled true if batch was cancelled, false if completed
+     */
+    void removeBatch(String batchId, boolean cancelled);
+    
+    /**
      * Checks if a batch exists.
      * 
      * @param batchId the batch identifier

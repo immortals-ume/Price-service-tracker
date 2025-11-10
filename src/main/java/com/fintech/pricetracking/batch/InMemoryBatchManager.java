@@ -134,9 +134,11 @@ public final class InMemoryBatchManager implements BatchManager {
      * <p><b>Thread Safety:</b> Uses write lock to ensure atomic removal.
      * 
      * @param batchId the batch identifier to remove
-     * @param status the completion status (COMPLETED or CANCELLED)
+     * @param cancelled true if batch was cancelled, false if completed
      */
-    public void removeBatch(String batchId, BatchAudit.BatchStatus status) {
+    @Override
+    public void removeBatch(String batchId, boolean cancelled) {
+        BatchAudit.BatchStatus status = cancelled ? BatchAudit.BatchStatus.CANCELLED : BatchAudit.BatchStatus.COMPLETED;
         lock.writeLock().lock();
         try {
             BatchSession session = batches.remove(batchId);
@@ -153,7 +155,7 @@ public final class InMemoryBatchManager implements BatchManager {
     }
     
     /**
-     * Removes a batch session from storage (legacy method).
+     * Removes a batch session from storage.
      * Records as COMPLETED by default.
      * 
      * <p><b>Thread Safety:</b> Uses write lock to ensure atomic removal.
@@ -162,7 +164,7 @@ public final class InMemoryBatchManager implements BatchManager {
      */
     @Override
     public void removeBatch(String batchId) {
-        removeBatch(batchId, BatchAudit.BatchStatus.COMPLETED);
+        removeBatch(batchId, false);
     }
     
     /**
