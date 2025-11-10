@@ -5,7 +5,6 @@ import java.util.List;
 
 /**
  * Interface for managing batch operations.
- * Follows Single Responsibility Principle - handles only batch lifecycle.
  */
 public interface BatchManager {
     

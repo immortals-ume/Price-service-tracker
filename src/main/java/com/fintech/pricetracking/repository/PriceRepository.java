@@ -6,7 +6,6 @@ import java.util.Optional;
 
 /**
  * Repository interface for price data storage operations.
- * Follows Repository Pattern for data access abstraction.
  */
 public interface PriceRepository {
     

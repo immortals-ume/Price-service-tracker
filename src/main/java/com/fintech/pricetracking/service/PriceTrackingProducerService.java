@@ -65,7 +65,7 @@ public class PriceTrackingProducerService implements ProducerService {
      * 
      * <p><b>REQUIREMENT:</b> "The producer uploads the records in the batch run in multiple chunks of 1000 records"
      * 
-     * <p><b>CRITICAL:</b> Records go to STAGING, NOT visible to consumers yet!
+     * <p> Records go to STAGING, NOT visible to consumers yet!
      * 
      * @param batchId the batch identifier
      * @param records the list of price records (max 1000 per chunk)

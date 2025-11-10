@@ -36,7 +36,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * - History available for auditing, analysis, debugging
  * </pre>
  * 
- * <h2>CRITICAL: Separation from Staging</h2>
+ * <h2>Separation from Staging</h2>
  * <p>This repository contains ONLY completed batch prices.
  * In-progress batches are stored separately in BatchManager.
  * This separation ensures consumers never see partial batches.
@@ -185,7 +185,7 @@ public final class InMemoryPriceRepository implements PriceRepository {
     /**
      * Retrieves the complete price history for a given instrument.
      * 
-     * <p><b>BONUS FEATURE:</b> Returns all historical prices, sorted by asOf (newest first).
+     * <p><b> Returns all historical prices, sorted by asOf (newest first).
      * 
      * <p><b>Use Cases:</b>
      * <ul>
