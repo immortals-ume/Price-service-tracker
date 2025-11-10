@@ -302,4 +302,4 @@ ERROR - Upload chunk failed: batch {batchId} not found
 ---
 
 
-## Alternatively you can use spring batch 
+## Alternatively, you can use spring batch 
