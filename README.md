@@ -1,54 +1,33 @@
 # Price Tracking Service
 
-A high-performance, in-memory price tracking service for financial instruments built with Java 17.
-
-## Features
-
-- **Batch Processing**: Upload prices in batches with chunks (max 1000 records per chunk)
-- **Atomic Operations**: All prices in a batch become visible simultaneously
-- **Latest Price Selection**: Automatically selects most recent price by asOf timestamp
-- **Price History**: Stores full history, returns latest (bonus feature)
-- **Thread-Safe**: ReadWriteLock for optimal concurrent performance
-- **SOLID Design**: Clean architecture following SOLID principles
+In-memory price tracking service for financial instruments. Producers upload prices in batches, consumers retrieve latest prices.
 
 ## Quick Start
 
-### Build & Test
+### Prerequisites
+- Java 17+
+- Maven 3.6+
+
+### Build
 ```bash
-mvn clean install
-mvn test
+  mvn clean install
+```
+
+### Run Tests
+```bash
+  mvn test
 ```
 
 ### Run Demo
 ```bash
-mvn exec:java -Dexec.mainClass="com.fintech.pricetracking.PriceTrackingDemo"
-```
-
-## Usage Example
-
-```java
-// Get services
-ProducerService producer = PriceTrackingServiceFactory.getProducerInstance();
-ConsumerService consumer = PriceTrackingServiceFactory.getConsumerInstance();
-
-// Producer: Upload prices
-String batch = producer.startBatch();
-producer.uploadChunk(batch, List.of(
-    new PriceRecord("AAPL", Instant.now(), 150.50),
-    new PriceRecord("GOOGL", Instant.now(), 2800.75)
-));
-producer.completeBatch(batch);
-
-// Consumer: Get latest price
-consumer.getLatestPrice("AAPL").ifPresent(price -> 
-    System.out.println("AAPL: $" + price.payload()));
+  mvn exec:java -Dexec.mainClass="com.fintech.pricetracking.PriceTrackingDemo"
 ```
 
 ## API
 
 ### ProducerService
-- `startBatch()` - Create new batch, returns batch ID
-- `uploadChunk(batchId, records)` - Upload up to 1000 records
+- `startBatch()` - Create batch, returns ID
+- `uploadChunk(batchId, records)` - Upload max 1000 records
 - `completeBatch(batchId)` - Publish all prices atomically
 - `cancelBatch(batchId)` - Discard batch
 
@@ -56,9 +35,79 @@ consumer.getLatestPrice("AAPL").ifPresent(price ->
 - `getLatestPrice(instrumentId)` - Get latest price by asOf time
 
 ### PriceRecord
-- `id` (String) - Instrument identifier
-- `asOf` (Instant) - Price timestamp
-- `payload` (Object) - Flexible price data
+- `id` - Instrument identifier (String)
+- `asOf` - Price timestamp (Instant)
+- `payload` - Price data (Object - flexible)
+
+## Design Decisions
+
+### 1. History-Based Storage
+**Decision:** Store ALL prices per instrument, return latest
+
+**Why:** 
+- Enables auditing and compliance
+- Supports historical analysis
+- Consumer API unchanged (still gets latest)
+- Repository: `Map<InstrumentId, List<PriceRecord>>` sorted by asOf (newest first)
+
+### 2. Two-Stage Price Selection
+**Decision:** Select latest price in two stages
+
+**Stage 1 - Within Batch (Strategy Pattern):**
+- Multiple prices for same instrument in one batch
+- `LatestAsOfPriceSelectionStrategy` selects latest by asOf
+- Only one price per instrument sent to repository
+
+**Stage 2 - Across Batches (Repository):**
+- Repository maintains sorted history
+- New prices added to history list
+- Consumer always gets first element (latest)
+
+**Why:** Separation of concerns - strategy handles batch logic, repository handles storage
+
+### 3. Past Timestamps
+**Decision:** Use past timestamps (`.minusSeconds()`) in tests and demo
+
+**Why:**
+- Realistic - prices determined in the past, not future
+- Demo: `now.minusSeconds(30)` = 30 seconds ago
+- Tests: Use `TestDataFactory` for consistent past timestamps
+
+### 4. Atomic Batch Completion
+**Decision:** All prices in batch visible simultaneously
+
+**Implementation:**
+- `saveAll()` uses write lock
+- Consumers blocked during write
+- See all prices or none
+
+**Why:** Business requirement - "all prices should be made available at the same time"
+
+### 5. Thread Safety (ReadWriteLock)
+**Decision:** Use ReadWriteLock instead of synchronized
+
+**Why:**
+- Multiple concurrent reads (no blocking)
+- Exclusive writes (atomic updates)
+- Better performance for read-heavy workloads
+
+### 6. Separated Producer/Consumer Services
+**Decision:** Two separate service interfaces
+
+**Why:**
+- Interface Segregation Principle (ISP)
+- Producers don't need consumer methods
+- Consumers don't need producer methods
+- Clear separation of concerns
+
+### 7. TestDataFactory Utility
+**Decision:** Centralize test data creation
+
+**Why:**
+- DRY principle - no duplication
+- Consistent past timestamps across tests
+- Easy to maintain and update
+- Single source of truth for test data
 
 ## Architecture
 
@@ -74,12 +123,9 @@ com.fintech.pricetracking
 
 ## Key Behaviors
 
-### Price Selection
-- **Within batch**: Latest asOf wins (Strategy pattern)
-- **Across batches**: Only newer asOf replaces existing
-- **History**: All prices stored, latest returned
-
-### Example
+**Within Batch:** Strategy selects latest by asOf  
+**Across Batches:** Repository maintains sorted history, returns latest  
+**Example:**
 ```
 Batch 1: AAPL @ 10:05 = $155 → stored
 Batch 2: AAPL @ 10:00 = $150 → added to history (older)
@@ -88,71 +134,41 @@ Consumer gets: $160 (latest)
 History: [$160, $155, $150] (sorted newest first)
 ```
 
-## Thread Safety
-
-- **ReadWriteLock**: Multiple concurrent reads, exclusive writes
-- **Atomic batch completion**: All-or-nothing visibility
-- **ConcurrentHashMap**: Lock-free concurrent access
-
 ## Testing
 
-**75 tests - 100% passing** ✅
+**74 tests - 100% passing**
 
-| Test Suite | Tests | Coverage |
-|------------|-------|----------|
-| ProducerServiceTest | 19 | Batch lifecycle, chunks, validation |
-| ConsumerServiceTest | 11 | Latest price retrieval |
-| InMemoryPriceRepositoryTest | 14 | Storage, history, atomicity |
-| InMemoryBatchManagerTest | 12 | Batch management |
-| LatestAsOfPriceSelectionStrategyTest | 7 | asOf selection |
-| IntegrationTest | 6 | End-to-end, concurrency |
-| PriceTrackingServiceFactoryTest | 6 | Factory pattern |
+- ProducerServiceTest (19) - Batch lifecycle, validation
+- ConsumerServiceTest (11) - Latest price retrieval
+- InMemoryPriceRepositoryTest (14) - Storage, history
+- InMemoryBatchManagerTest (12) - Batch management
+- LatestAsOfPriceSelectionStrategyTest (6) - asOf selection
+- IntegrationTest (6) - End-to-end scenarios
+- PriceTrackingServiceFactoryTest (6) - Factory pattern
 
-### Run Tests
-```bash
-mvn test                                    # All tests
-mvn test -Dtest=ProducerServiceTest        # Specific test
-```
-
-## Error Handling
-
-- `InvalidBatchOperationException` - Invalid batch operations
-- `InvalidChunkSizeException` - Chunk exceeds 1000 records
-- `IllegalArgumentException` - Invalid parameters
-- `NullPointerException` - Null required parameters
+**TestDataFactory:** Centralized test data with past timestamps
 
 ## Requirements Met
 
-✅ Batch upload with 1000 record chunks  
+✅ Batch upload (1000 record chunks)  
 ✅ Atomic batch completion  
 ✅ Latest price by asOf timestamp  
 ✅ Batch cancellation  
-✅ Thread-safe concurrent operations  
+✅ Thread-safe operations  
 ✅ Resilient to incorrect operation order  
-✅ In-memory, zero external dependencies  
-✅ Comprehensive test coverage  
+✅ Price history (bonus feature)  
 
 ## Dependencies
 
 - Java 17
-- JUnit 5 (5.10.1) - Testing
-- AssertJ (3.24.2) - Assertions
+- JUnit 5 (5.10.1)
+- AssertJ (3.24.2)
 
 ## Design Patterns
 
 - **Factory** - Service creation
-- **Repository** - Data access
-- **Strategy** - Price selection
+- **Repository** - Data access abstraction
+- **Strategy** - Price selection algorithm
 - **Singleton** - Service instances
 
-## SOLID Principles
-
-- **SRP**: Each class has one responsibility
-- **OCP**: Open for extension via interfaces
-- **LSP**: Proper interface implementations
-- **ISP**: Separate Producer/Consumer services
-- **DIP**: Depend on abstractions
-
 ---
-
-Built with ❤️ using Java 17, Maven, and SOLID principles.
