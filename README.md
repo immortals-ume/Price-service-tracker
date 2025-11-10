@@ -2,6 +2,8 @@
 
 In-memory price tracking service for financial instruments. Producers upload prices in batches, consumers retrieve latest prices.
 
+**GitHub Repository:** [https://github.com/immortals-ume/Price-service-tracker](https://github.com/immortals-ume/Price-service-tracker)
+
 ## Quick Start
 
 ### Prerequisites
