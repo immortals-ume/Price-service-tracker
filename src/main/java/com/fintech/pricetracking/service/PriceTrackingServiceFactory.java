@@ -4,8 +4,6 @@ import com.fintech.pricetracking.batch.BatchManager;
 import com.fintech.pricetracking.batch.InMemoryBatchManager;
 import com.fintech.pricetracking.repository.InMemoryPriceRepository;
 import com.fintech.pricetracking.repository.PriceRepository;
-import com.fintech.pricetracking.strategy.LatestAsOfPriceSelectionStrategy;
-import com.fintech.pricetracking.strategy.PriceSelectionStrategy;
 
 /**
  * Factory class that provides singleton instances of Producer and Consumer services.
@@ -30,7 +28,6 @@ public class PriceTrackingServiceFactory {
     private static class SharedDependencies {
         private static final BatchManager BATCH_MANAGER = new InMemoryBatchManager();
         private static final PriceRepository PRICE_REPOSITORY = new InMemoryPriceRepository();
-        private static final PriceSelectionStrategy PRICE_SELECTION_STRATEGY = new LatestAsOfPriceSelectionStrategy();
     }
     
     /**
@@ -39,8 +36,7 @@ public class PriceTrackingServiceFactory {
     private static class ProducerInstanceHolder {
         private static final ProducerService INSTANCE = new PriceTrackingProducerService(
             SharedDependencies.BATCH_MANAGER,
-            SharedDependencies.PRICE_REPOSITORY,
-            SharedDependencies.PRICE_SELECTION_STRATEGY
+            SharedDependencies.PRICE_REPOSITORY
         );
     }
     
@@ -72,9 +68,8 @@ public class PriceTrackingServiceFactory {
      */
     public static ProducerService createCustomProducerInstance(
             BatchManager batchManager,
-            PriceRepository priceRepository,
-            PriceSelectionStrategy priceSelectionStrategy) {
-        return new PriceTrackingProducerService(batchManager, priceRepository, priceSelectionStrategy);
+            PriceRepository priceRepository) {
+        return new PriceTrackingProducerService(batchManager, priceRepository);
     }
     
     /**

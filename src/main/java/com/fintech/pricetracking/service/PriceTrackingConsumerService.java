@@ -18,13 +18,7 @@ import java.util.Optional;
  *   <li>Retrieve latest price for a given instrument</li>
  *   <li>Provide read-only access to published prices</li>
  * </ul>
- * 
- * <h2>Design Principles:</h2>
- * <ul>
- *   <li><b>SRP:</b> Handles only consumer operations</li>
- *   <li><b>ISP:</b> Implements only ConsumerService interface</li>
- *   <li><b>DIP:</b> Depends on PriceRepository abstraction</li>
- * </ul>
+ *
  * 
  * <h2>Thread Safety:</h2>
  * <p>This class is thread-safe. Multiple consumers can call getLatestPrice()
@@ -32,6 +26,8 @@ import java.util.Optional;
  */
 public  class PriceTrackingConsumerService implements ConsumerService {
 
+    private static final org.slf4j.Logger logger = org.slf4j.LoggerFactory.getLogger(PriceTrackingConsumerService.class);
+    
     private final PriceRepository priceRepository;
 
     /**
@@ -52,9 +48,8 @@ public  class PriceTrackingConsumerService implements ConsumerService {
      * 
      * <p><b>How "latest by asOf" works:</b>
      * <ul>
-     *   <li>Within batch: PriceSelectionStrategy selects latest asOf</li>
-     *   <li>Across batches: Repository compares asOf, only stores if newer</li>
-     *   <li>This method returns the pre-selected latest price</li>
+     *   <li>Repository maintains full history sorted by asOf (newest first)</li>
+     *   <li>This method returns the first element (latest) from history</li>
      *   <li>Fast: O(1) lookup, no comparison needed</li>
      * </ul>
      * 
@@ -65,6 +60,15 @@ public  class PriceTrackingConsumerService implements ConsumerService {
     @Override
     public Optional<PriceRecord> getLatestPrice(String instrumentId) {
         Objects.requireNonNull(instrumentId, "instrumentId cannot be null");
-        return priceRepository.findByInstrumentId(instrumentId);
+        logger.debug("Consumer requesting latest price for: {}", instrumentId);
+        
+        Optional<PriceRecord> result = priceRepository.findByInstrumentId(instrumentId);
+        if (result.isPresent()) {
+            logger.debug("Returning price for {}: ${}", instrumentId, result.get().payload());
+        } else {
+            logger.debug("No price found for: {}", instrumentId);
+        }
+        
+        return result;
     }
 }

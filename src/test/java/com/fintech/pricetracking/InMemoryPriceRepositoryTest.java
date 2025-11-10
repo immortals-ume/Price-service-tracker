@@ -7,7 +7,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import java.time.Instant;
-import java.util.Map;
+import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.*;
@@ -43,36 +43,36 @@ class InMemoryPriceRepositoryTest {
     }
 
     @Test
-    @DisplayName("saveAll stores multiple prices successfully")
-    void testSaveAllStoresPrices() {
-        Map<String, PriceRecord> prices = Map.of(
-            "AAPL", TestDataFactory.createPrice("AAPL", baseTime, 60, 150.0),
-            "GOOGL", TestDataFactory.createPrice("GOOGL", baseTime, 60, 2800.0)
+    @DisplayName("saveAllRecords stores multiple prices successfully")
+    void testSaveAllRecordsStoresPrices() {
+        List<PriceRecord> records = List.of(
+            TestDataFactory.createPrice("AAPL", baseTime, 60, 150.0),
+            TestDataFactory.createPrice("GOOGL", baseTime, 60, 2800.0)
         );
         
-        repository.saveAll(prices);
+        repository.saveAllRecords(records);
         
         assertThat(repository.findByInstrumentId("AAPL")).isPresent();
         assertThat(repository.findByInstrumentId("GOOGL")).isPresent();
     }
 
     @Test
-    @DisplayName("saveAll throws NullPointerException when prices map is null")
-    void testSaveAllValidatesNull() {
-        assertThatThrownBy(() -> repository.saveAll(null))
+    @DisplayName("saveAllRecords throws NullPointerException when records list is null")
+    void testSaveAllRecordsValidatesNull() {
+        assertThatThrownBy(() -> repository.saveAllRecords(null))
             .isInstanceOf(NullPointerException.class)
-            .hasMessageContaining("prices map cannot be null");
+            .hasMessageContaining("records list cannot be null");
     }
 
     @Test
-    @DisplayName("saveAll updates price when newer timestamp is provided")
-    void testSaveAllWithNewerAsOfUpdatesPrice() {
-        repository.saveAll(Map.of(
-            "AAPL", TestDataFactory.createPrice("AAPL", baseTime, 120, 150.0)  // 2 min ago (older)
+    @DisplayName("saveAllRecords adds newer price to history and consumer gets latest")
+    void testSaveAllRecordsWithNewerAsOfUpdatesLatest() {
+        repository.saveAllRecords(List.of(
+            TestDataFactory.createPrice("AAPL", baseTime, 120, 150.0)  // 2 min ago (older)
         ));
         
-        repository.saveAll(Map.of(
-            "AAPL", TestDataFactory.createPrice("AAPL", baseTime, 60, 160.0)  // 1 min ago (newer)
+        repository.saveAllRecords(List.of(
+            TestDataFactory.createPrice("AAPL", baseTime, 60, 160.0)  // 1 min ago (newer)
         ));
         
         Optional<PriceRecord> price = repository.findByInstrumentId("AAPL");
@@ -82,14 +82,14 @@ class InMemoryPriceRepositoryTest {
     }
 
     @Test
-    @DisplayName("saveAll adds older price to history but consumer still gets latest")
-    void testSaveAllWithOlderAsOfAddsToHistory() {
-        repository.saveAll(Map.of(
-            "AAPL", TestDataFactory.createPrice("AAPL", baseTime, 60, 160.0)
+    @DisplayName("saveAllRecords adds older price to history but consumer still gets latest")
+    void testSaveAllRecordsWithOlderAsOfAddsToHistory() {
+        repository.saveAllRecords(List.of(
+            TestDataFactory.createPrice("AAPL", baseTime, 60, 160.0)
         ));
         
-        repository.saveAll(Map.of(
-            "AAPL", TestDataFactory.createPrice("AAPL", baseTime, 60, 150.0)
+        repository.saveAllRecords(List.of(
+            TestDataFactory.createPrice("AAPL", baseTime, 120, 150.0)
         ));
         
         // Consumer still gets the latest price
@@ -104,10 +104,10 @@ class InMemoryPriceRepositoryTest {
     }
 
     @Test
-    @DisplayName("saveAll stores new instrument successfully")
-    void testSaveAllWithNewInstrumentStoresIt() {
-        repository.saveAll(Map.of(
-            "AAPL", TestDataFactory.createPrice("AAPL", baseTime, 60, 150.0)
+    @DisplayName("saveAllRecords stores new instrument successfully")
+    void testSaveAllRecordsWithNewInstrumentStoresIt() {
+        repository.saveAllRecords(List.of(
+            TestDataFactory.createPrice("AAPL", baseTime, 60, 150.0)
         ));
         
         assertThat(repository.findByInstrumentId("AAPL")).isPresent();
@@ -116,9 +116,9 @@ class InMemoryPriceRepositoryTest {
     @Test
     @DisplayName("clear removes all stored prices")
     void testClearRemovesAllPrices() {
-        repository.saveAll(Map.of(
-            "AAPL", TestDataFactory.createPrice("AAPL", baseTime, 60, 150.0),
-            "GOOGL", TestDataFactory.createPrice("GOOGL", baseTime, 60, 2800.0)
+        repository.saveAllRecords(List.of(
+            TestDataFactory.createPrice("AAPL", baseTime, 60, 150.0),
+            TestDataFactory.createPrice("GOOGL", baseTime, 60, 2800.0)
         ));
         
         repository.clear();
@@ -132,9 +132,9 @@ class InMemoryPriceRepositoryTest {
     void testSizeReturnsCorrectCount() {
         assertThat(repository.size()).isZero();
         
-        repository.saveAll(Map.of(
-            "AAPL", TestDataFactory.createPrice("AAPL", baseTime, 60, 150.0),
-            "GOOGL", TestDataFactory.createPrice("GOOGL", baseTime, 60, 2800.0)
+        repository.saveAllRecords(List.of(
+            TestDataFactory.createPrice("AAPL", baseTime, 60, 150.0),
+            TestDataFactory.createPrice("GOOGL", baseTime, 60, 2800.0)
         ));
         
         assertThat(repository.size()).isEqualTo(2);
@@ -143,8 +143,8 @@ class InMemoryPriceRepositoryTest {
     @Test
     @DisplayName("contains returns true for existing instrument and false for non-existent")
     void testContainsReturnsTrueForExistingInstrument() {
-        repository.saveAll(Map.of(
-            "AAPL", TestDataFactory.createPrice("AAPL", baseTime, 60, 150.0)
+        repository.saveAllRecords(List.of(
+            TestDataFactory.createPrice("AAPL", baseTime, 60, 150.0)
         ));
         
         assertThat(repository.contains("AAPL")).isTrue();
@@ -163,14 +163,14 @@ class InMemoryPriceRepositoryTest {
     @DisplayName("findHistoryByInstrumentId returns all prices sorted by asOf (newest first)")
     void testFindHistoryReturnsSortedPrices() {
         // Add prices in random order
-        repository.saveAll(Map.of(
-            "AAPL", TestDataFactory.createPrice("AAPL", baseTime, 120, 150.0)  // 2 min ago (oldest)
+        repository.saveAllRecords(List.of(
+            TestDataFactory.createPrice("AAPL", baseTime, 120, 150.0)  // 2 min ago (oldest)
         ));
-        repository.saveAll(Map.of(
-            "AAPL", TestDataFactory.createPrice("AAPL", baseTime, 30, 170.0)   // 30 sec ago (LATEST)
+        repository.saveAllRecords(List.of(
+            TestDataFactory.createPrice("AAPL", baseTime, 30, 170.0)   // 30 sec ago (LATEST)
         ));
-        repository.saveAll(Map.of(
-            "AAPL", TestDataFactory.createPrice("AAPL", baseTime, 60, 160.0)   // 1 min ago
+        repository.saveAllRecords(List.of(
+            TestDataFactory.createPrice("AAPL", baseTime, 60, 160.0)   // 1 min ago
         ));
         
         var history = repository.findHistoryByInstrumentId("AAPL");
@@ -187,14 +187,10 @@ class InMemoryPriceRepositoryTest {
     @Test
     @DisplayName("findByInstrumentId returns latest price when history exists")
     void testFindByInstrumentIdReturnsLatestFromHistory() {
-        repository.saveAll(Map.of(
-            "AAPL", TestDataFactory.createPrice("AAPL", baseTime, 120, 150.0)  // 2 min ago (oldest)
-        ));
-        repository.saveAll(Map.of(
-            "AAPL", TestDataFactory.createPrice("AAPL", baseTime, 60, 160.0)   // 1 min ago
-        ));
-        repository.saveAll(Map.of(
-            "AAPL", TestDataFactory.createPrice("AAPL", baseTime, 30, 170.0)   // 30 sec ago (LATEST)
+        repository.saveAllRecords(List.of(
+            TestDataFactory.createPrice("AAPL", baseTime, 120, 150.0),  // 2 min ago (oldest)
+            TestDataFactory.createPrice("AAPL", baseTime, 60, 160.0),   // 1 min ago
+            TestDataFactory.createPrice("AAPL", baseTime, 30, 170.0)    // 30 sec ago (LATEST)
         ));
         
         Optional<PriceRecord> latest = repository.findByInstrumentId("AAPL");

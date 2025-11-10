@@ -5,10 +5,10 @@ import com.fintech.pricetracking.exception.InvalidBatchOperationException;
 import com.fintech.pricetracking.exception.InvalidChunkSizeException;
 import com.fintech.pricetracking.model.PriceRecord;
 import com.fintech.pricetracking.repository.PriceRepository;
-import com.fintech.pricetracking.strategy.PriceSelectionStrategy;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.List;
-import java.util.Map;
 import java.util.Objects;
 
 /**
@@ -24,40 +24,34 @@ import java.util.Objects;
  *   <li>Validate chunk sizes and batch operations</li>
  *   <li>Coordinate with BatchManager and PriceRepository</li>
  * </ul>
- * 
- * <h2>Design Principles:</h2>
- * <ul>
- *   <li><b>SRP:</b> Handles only producer operations</li>
- *   <li><b>ISP:</b> Implements only ProducerService interface</li>
- *   <li><b>DIP:</b> Depends on abstractions (interfaces)</li>
- * </ul>
+ *
  */
 public class PriceTrackingProducerService implements ProducerService {
 
+    private static final Logger logger = LoggerFactory.getLogger(PriceTrackingProducerService.class);
+    
     private final BatchManager batchManager;
     private final PriceRepository priceRepository;
-    private final PriceSelectionStrategy priceSelectionStrategy;
 
     /**
      * Constructs a new PriceTrackingProducerService with injected dependencies.
      * 
      * @param batchManager manages batch lifecycle
      * @param priceRepository handles price data storage
-     * @param priceSelectionStrategy determines which prices to select
      * @throws NullPointerException if any parameter is null
      */
     public PriceTrackingProducerService(
             BatchManager batchManager,
-            PriceRepository priceRepository,
-            PriceSelectionStrategy priceSelectionStrategy) {
+            PriceRepository priceRepository) {
         this.batchManager = Objects.requireNonNull(batchManager, "batchManager cannot be null");
         this.priceRepository = Objects.requireNonNull(priceRepository, "priceRepository cannot be null");
-        this.priceSelectionStrategy = Objects.requireNonNull(priceSelectionStrategy, "priceSelectionStrategy cannot be null");
     }
 
     @Override
     public String startBatch() {
-        return batchManager.createBatch();
+        String batchId = batchManager.createBatch();
+        logger.info("Batch started: {}", batchId);
+        return batchId;
     }
 
     /**
@@ -76,18 +70,23 @@ public class PriceTrackingProducerService implements ProducerService {
     @Override
     public void uploadChunk(String batchId, List<PriceRecord> records) {
         if (records == null) {
+            logger.error("Upload chunk failed for batch {}: records is null", batchId);
             throw new IllegalArgumentException("records must not be null");
         }
         
         if (records.size() > 1000) {
+            logger.error("Upload chunk failed for batch {}: chunk size {} exceeds maximum of 1000", 
+                batchId, records.size());
             throw new InvalidChunkSizeException("Chunk size exceeds maximum of 1000 records: " + records.size());
         }
         
         if (!batchManager.batchExists(batchId)) {
+            logger.error("Upload chunk failed: batch {} not found", batchId);
             throw new InvalidBatchOperationException("Batch not found: " + batchId);
         }
         
         batchManager.addRecords(batchId, records);
+        logger.debug("Uploaded chunk to batch {}: {} records", batchId, records.size());
     }
 
     /**
@@ -96,18 +95,26 @@ public class PriceTrackingProducerService implements ProducerService {
      * <p><b>REQUIREMENT:</b> "On completion, all prices in a batch run should be made available at the same time"
      * <p><b>REQUIREMENT:</b> "The last value is determined by the asOf time"
      * 
+     * <p><b>Implementation:</b> Saves ALL records to history without filtering.
+     * The repository maintains full audit trail. Consumers automatically get the latest
+     * price by asOf time when querying.
+     * 
      * @param batchId the batch identifier to complete
      * @throws InvalidBatchOperationException if batch not found
      */
     @Override
     public void completeBatch(String batchId) {
         if (!batchManager.batchExists(batchId)) {
+            logger.error("Complete batch failed: batch {} not found", batchId);
             throw new InvalidBatchOperationException("Batch not found: " + batchId);
         }
         List<PriceRecord> records = batchManager.getBatchRecords(batchId);
-        Map<String, PriceRecord> selectedPrices = priceSelectionStrategy.selectPrices(records);
-        priceRepository.saveAll(selectedPrices);
+        logger.info("Completing batch {}: {} total records", batchId, records.size());
+        
+        priceRepository.saveAllRecords(records);
         batchManager.removeBatch(batchId);
+        
+        logger.info("Batch completed successfully: {}", batchId);
     }
 
     /**
@@ -121,8 +128,19 @@ public class PriceTrackingProducerService implements ProducerService {
     @Override
     public void cancelBatch(String batchId) {
         if (!batchManager.batchExists(batchId)) {
+            logger.error("Cancel batch failed: batch {} not found", batchId);
             throw new InvalidBatchOperationException("Batch not found: " + batchId);
         }
-        batchManager.removeBatch(batchId);
+        
+        logger.info("Cancelling batch: {}", batchId);
+        
+        if (batchManager instanceof com.fintech.pricetracking.batch.InMemoryBatchManager) {
+            ((com.fintech.pricetracking.batch.InMemoryBatchManager) batchManager)
+                .removeBatch(batchId, com.fintech.pricetracking.model.BatchAudit.BatchStatus.CANCELLED);
+        } else {
+            batchManager.removeBatch(batchId);
+        }
+        
+        logger.info("Batch cancelled: {}", batchId);
     }
 }

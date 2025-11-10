@@ -1,6 +1,9 @@
 package com.fintech.pricetracking;
 
+import com.fintech.pricetracking.batch.InMemoryBatchManager;
+import com.fintech.pricetracking.model.BatchAudit;
 import com.fintech.pricetracking.model.PriceRecord;
+import com.fintech.pricetracking.repository.InMemoryPriceRepository;
 import com.fintech.pricetracking.service.ConsumerService;
 import com.fintech.pricetracking.service.ProducerService;
 import com.fintech.pricetracking.service.PriceTrackingServiceFactory;
@@ -16,8 +19,15 @@ import java.util.List;
 public final class PriceTrackingDemo {
     
     public static void main(String[] args) {
-        ProducerService producer = PriceTrackingServiceFactory.getProducerInstance();
-        ConsumerService consumer = PriceTrackingServiceFactory.getConsumerInstance();
+        InMemoryBatchManager batchManager = new InMemoryBatchManager();
+        InMemoryPriceRepository priceRepository = new InMemoryPriceRepository();
+        
+        ProducerService producer = PriceTrackingServiceFactory.createCustomProducerInstance(
+            batchManager, priceRepository
+        );
+        ConsumerService consumer = PriceTrackingServiceFactory.createCustomConsumerInstance(
+            priceRepository
+        );
         
         System.out.println("=== Price Tracking Service Demo ===\n");
 
@@ -26,6 +36,7 @@ public final class PriceTrackingDemo {
         Instant now = Instant.now();
         producer.uploadChunk(batch1, List.of(
             new PriceRecord("AAPL", now.minusSeconds(60), 150.50),
+                new PriceRecord("AAPL", now.minusSeconds(30), 190.50),
             new PriceRecord("GOOGL", now.minusSeconds(30), 2800.75)
         ));
         producer.completeBatch(batch1);
@@ -72,6 +83,44 @@ public final class PriceTrackingDemo {
         
         consumer.getLatestPrice("TSLA").ifPresent(price -> 
             System.out.println("   ✓ TSLA latest: $" + price.payload() + " (30 sec ago - most recent)"));
+
+        System.out.println("\n4. Batch Cancellation");
+        String batch4 = producer.startBatch();
+        producer.uploadChunk(batch4, List.of(
+            new PriceRecord("NVDA", Instant.now().minusSeconds(60), 500.0)
+        ));
+        producer.cancelBatch(batch4);
+        System.out.println("   ✓ Batch cancelled (not visible to consumers)");
+        
+        boolean nvidaExists = consumer.getLatestPrice("NVDA").isPresent();
+        System.out.println("   ✓ NVDA price exists: " + nvidaExists + " (should be false)");
+
+        System.out.println("\n5. Batch History (Audit Trail)");
+        List<BatchAudit> history = batchManager.getBatchHistory();
+        System.out.println("   Total batches processed: " + history.size());
+        
+        long completed = history.stream()
+            .filter(b -> b.status() == BatchAudit.BatchStatus.COMPLETED)
+            .count();
+        long cancelled = history.stream()
+            .filter(b -> b.status() == BatchAudit.BatchStatus.CANCELLED)
+            .count();
+        
+        System.out.println("   ✓ Completed: " + completed);
+        System.out.println("   ✓ Cancelled: " + cancelled);
+        
+        System.out.println("\n   Recent batches:");
+        history.stream().limit(3).forEach(audit -> 
+            System.out.println("      - " + audit.status() + ": " + 
+                audit.recordCount() + " records at " + audit.completedAt())
+        );
+
+        System.out.println("\n6. Price History (Per Instrument)");
+        List<PriceRecord> tslaHistory = priceRepository.findHistoryByInstrumentId("TSLA");
+        System.out.println("   TSLA price history: " + tslaHistory.size() + " records");
+        tslaHistory.forEach(record -> 
+            System.out.println("      - $" + record.payload() + " at " + record.asOf())
+        );
         
         System.out.println("\n✅ Done!");
     }

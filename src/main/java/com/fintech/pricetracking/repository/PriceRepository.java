@@ -1,7 +1,6 @@
 package com.fintech.pricetracking.repository;
 
 import com.fintech.pricetracking.model.PriceRecord;
-import java.util.Map;
 import java.util.Optional;
 
 /**
@@ -10,11 +9,12 @@ import java.util.Optional;
 public interface PriceRepository {
     
     /**
-     * Stores or updates price records atomically.
+     * Saves all price records to history without filtering.
+     * Each record is added to its instrument's history list.
      * 
-     * @param prices map of instrument ID to price record
+     * @param records list of all price records to save
      */
-    void saveAll(Map<String, PriceRecord> prices);
+    void saveAllRecords(java.util.List<PriceRecord> records);
     
     /**
      * Retrieves a price record by instrument ID.

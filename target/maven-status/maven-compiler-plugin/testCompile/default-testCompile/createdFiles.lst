@@ -1,8 +1,0 @@
-com/fintech/pricetracking/InMemoryPriceRepositoryTest.class
-com/fintech/pricetracking/IntegrationTest.class
-com/fintech/pricetracking/ProducerServiceTest.class
-com/fintech/pricetracking/ConsumerServiceTest.class
-com/fintech/pricetracking/LatestAsOfPriceSelectionStrategyTest.class
-com/fintech/pricetracking/PriceTrackingServiceFactoryTest.class
-com/fintech/pricetracking/TestDataFactory.class
-com/fintech/pricetracking/InMemoryBatchManagerTest.class

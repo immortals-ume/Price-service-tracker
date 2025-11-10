@@ -7,7 +7,6 @@ import com.fintech.pricetracking.repository.PriceRepository;
 import com.fintech.pricetracking.service.ConsumerService;
 import com.fintech.pricetracking.service.ProducerService;
 import com.fintech.pricetracking.service.PriceTrackingServiceFactory;
-import com.fintech.pricetracking.strategy.LatestAsOfPriceSelectionStrategy;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -38,8 +37,7 @@ class IntegrationTest {
         PriceRepository sharedRepository = new InMemoryPriceRepository();
         producer = PriceTrackingServiceFactory.createCustomProducerInstance(
             new InMemoryBatchManager(),
-            sharedRepository,
-            new LatestAsOfPriceSelectionStrategy()
+            sharedRepository
         );
         consumer = PriceTrackingServiceFactory.createCustomConsumerInstance(sharedRepository);
         baseTime = Instant.parse("2024-01-01T10:00:00Z");

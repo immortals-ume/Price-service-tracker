@@ -6,7 +6,6 @@ import com.fintech.pricetracking.repository.InMemoryPriceRepository;
 import com.fintech.pricetracking.service.ConsumerService;
 import com.fintech.pricetracking.service.ProducerService;
 import com.fintech.pricetracking.service.PriceTrackingServiceFactory;
-import com.fintech.pricetracking.strategy.LatestAsOfPriceSelectionStrategy;
 import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.Constructor;
@@ -54,8 +53,7 @@ class PriceTrackingServiceFactoryTest {
     void testCreateCustomProducerInstance() {
         ProducerService customProducer = PriceTrackingServiceFactory.createCustomProducerInstance(
             new InMemoryBatchManager(),
-            new InMemoryPriceRepository(),
-            new LatestAsOfPriceSelectionStrategy()
+            new InMemoryPriceRepository()
         );
         
         assertThat(customProducer).isNotNull();
@@ -78,14 +76,12 @@ class PriceTrackingServiceFactoryTest {
     void testCustomInstancesAreNotSingletons() {
         ProducerService custom1 = PriceTrackingServiceFactory.createCustomProducerInstance(
             new InMemoryBatchManager(),
-            new InMemoryPriceRepository(),
-            new LatestAsOfPriceSelectionStrategy()
+            new InMemoryPriceRepository()
         );
         
         ProducerService custom2 = PriceTrackingServiceFactory.createCustomProducerInstance(
             new InMemoryBatchManager(),
-            new InMemoryPriceRepository(),
-            new LatestAsOfPriceSelectionStrategy()
+            new InMemoryPriceRepository()
         );
         
         assertThat(custom1).isNotSameAs(custom2);

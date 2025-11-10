@@ -44,6 +44,8 @@ import java.util.concurrent.ConcurrentHashMap;
  */
 public final class InMemoryPriceRepository implements PriceRepository {
     
+    private static final org.slf4j.Logger logger = org.slf4j.LoggerFactory.getLogger(InMemoryPriceRepository.class);
+    
     /**
      * Thread-safe storage for published prices with full history.
      * Contains ALL prices from completed batches.
@@ -92,56 +94,7 @@ public final class InMemoryPriceRepository implements PriceRepository {
         return updatedList;
     }
     
-    /**
-     * Atomically saves all prices to the repository, maintaining full history.
-     * 
-     * <p><b>REQUIREMENT:</b> "On completion, all prices in a batch run should be 
-     * made available at the same time"
-     * 
-     * <p><b>Implementation:</b>
-     * <ul>
-     *   <li>Uses write lock to ensure atomicity</li>
-     *   <li>Adds each price to the instrument's history list</li>
-     *   <li>Maintains sorted order (newest first)</li>
-     *   <li>Consumers see either none or all of the batch prices atomically</li>
-     *   <li>No partial visibility possible</li>
-     * </ul>
-     * 
-     * <p><b>Cross-Batch Behavior (with history):</b>
-     * <ul>
-     *   <li>Batch 1: AAPL @ 10:05 AM → stored [10:05]</li>
-     *   <li>Batch 2: AAPL @ 09:00 AM → added to history [10:05, 09:00]</li>
-     *   <li>Batch 3: AAPL @ 10:10 AM → added to history [10:10, 10:05, 09:00]</li>
-     *   <li>Consumer gets: AAPL @ 10:10 AM (latest, first in list)</li>
-     * </ul>
-     * 
-     * <p><b>Thread Safety:</b> Uses write lock to prevent concurrent modifications.
-     * Multiple saveAll() calls are serialized. Read operations can proceed concurrently.
-     * 
-     * <p><b>Performance:</b> O(n * m) where n = number of prices, m = avg history size per instrument.
-     * 
-     * @param prices map of instrument ID to price record (already filtered to latest by asOf within batch)
-     * @throws NullPointerException if prices is null (Java 17 Objects.requireNonNull)
-     */
-    @Override
-    public void saveAll(Map<String, PriceRecord> prices) {
-        Objects.requireNonNull(prices, "prices map cannot be null");
-        
-        lock.writeLock().lock();
-        try {
-            for (Map.Entry<String, PriceRecord> entry : prices.entrySet()) {
-                String instrumentId = entry.getKey();
-                PriceRecord newPrice = entry.getValue();
-                
-                storage.compute(instrumentId, (key, existingHistory) -> 
-                    addToHistory(existingHistory, newPrice)
-                );
-            }
-        } finally {
-            lock.writeLock().unlock();
-        }
-    }
-    
+
     /**
      * Retrieves the latest price record by instrument ID.
      * 
@@ -174,8 +127,10 @@ public final class InMemoryPriceRepository implements PriceRepository {
         try {
             List<PriceRecord> history = storage.get(instrumentId);
             if (history == null || history.isEmpty()) {
+                logger.debug("Price not found for instrument: {}", instrumentId);
                 return Optional.empty();
             }
+            logger.debug("Retrieved latest price for instrument: {}", instrumentId);
             return Optional.of(history.get(0));
         } finally {
             lock.readLock().unlock();
@@ -217,7 +172,65 @@ public final class InMemoryPriceRepository implements PriceRepository {
     }
     
     /**
-     * Clears all stored prices from the repository.
+     * Saves all price records to history without filtering.
+     * Each record is added to its instrument's history list, maintaining sorted order.
+     * 
+     * <p><b>REQUIREMENT:</b> "On completion, all prices in a batch run should be 
+     * made available at the same time"
+     * 
+     * <p><b>Implementation:</b>
+     * <ul>
+     *   <li>Uses write lock to ensure atomicity</li>
+     *   <li>Adds EVERY record to its instrument's history list</li>
+     *   <li>Maintains sorted order (newest first) per instrument</li>
+     *   <li>No filtering - preserves complete audit trail</li>
+     *   <li>Consumers see either none or all of the batch prices atomically</li>
+     * </ul>
+     * 
+     * <p><b>Example:</b>
+     * <pre>
+     * Batch contains:
+     *   - AAPL @ 10:00 AM, price $150
+     *   - AAPL @ 10:05 AM, price $151
+     *   - AAPL @ 09:00 AM, price $149
+     * 
+     * All three saved to history: [10:05, 10:00, 09:00]
+     * Consumer gets latest: AAPL @ 10:05 AM
+     * Full audit trail preserved
+     * </pre>
+     * 
+     * <p><b>Thread Safety:</b> Uses write lock to prevent concurrent modifications.
+     * 
+     * @param records list of all price records from a batch
+     * @throws NullPointerException if records is null
+     */
+    @Override
+    public void saveAllRecords(List<PriceRecord> records) {
+        Objects.requireNonNull(records, "records list cannot be null");
+        
+        logger.debug("Saving {} records to repository", records.size());
+        
+        lock.writeLock().lock();
+        try {
+            int newInstruments = 0;
+            for (PriceRecord record : records) {
+                String instrumentId = record.id();
+                boolean isNew = !storage.containsKey(instrumentId);
+                storage.compute(instrumentId, (key, existingHistory) -> 
+                    addToHistory(existingHistory, record)
+                );
+                if (isNew) newInstruments++;
+            }
+            
+            logger.info("Saved {} records ({} new instruments) to repository. Total instruments: {}", 
+                records.size(), newInstruments, storage.size());
+        } finally {
+            lock.writeLock().unlock();
+        }
+    }
+    
+    /**
+     * Clears all stored prices and history.
      * 
      * <p><b>Use Case:</b> Testing, cleanup, or reset operations.
      * 

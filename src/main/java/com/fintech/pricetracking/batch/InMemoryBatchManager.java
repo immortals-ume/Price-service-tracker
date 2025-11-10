@@ -1,7 +1,11 @@
 package com.fintech.pricetracking.batch;
 
+import com.fintech.pricetracking.model.BatchAudit;
 import com.fintech.pricetracking.model.PriceRecord;
 
+import java.time.Instant;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -40,7 +44,10 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
  */
 public final class InMemoryBatchManager implements BatchManager {
     
+    private static final org.slf4j.Logger logger = org.slf4j.LoggerFactory.getLogger(InMemoryBatchManager.class);
+    
     private final Map<String, BatchSession> batches;
+    private final List<BatchAudit> batchHistory;
     private final ReadWriteLock lock;
     
     /**
@@ -48,6 +55,7 @@ public final class InMemoryBatchManager implements BatchManager {
      */
     public InMemoryBatchManager() {
         this.batches = new ConcurrentHashMap<>();
+        this.batchHistory = new ArrayList<>();
         this.lock = new ReentrantReadWriteLock();
     }
     
@@ -64,6 +72,7 @@ public final class InMemoryBatchManager implements BatchManager {
         lock.writeLock().lock();
         try {
             batches.put(batchId, new BatchSession(batchId));
+            logger.debug("Created batch session: {}", batchId);
             return batchId;
         } finally {
             lock.writeLock().unlock();
@@ -85,9 +94,12 @@ public final class InMemoryBatchManager implements BatchManager {
         try {
             BatchSession session = batches.get(batchId);
             if (session == null) {
+                logger.error("Cannot add records: batch {} not found", batchId);
                 throw new IllegalArgumentException("Batch not found: " + batchId);
             }
             session.addRecords(records);
+            logger.debug("Added {} records to batch {}. Total: {}", 
+                records.size(), batchId, session.getRecordCount());
         } finally {
             lock.writeLock().unlock();
         }
@@ -117,7 +129,32 @@ public final class InMemoryBatchManager implements BatchManager {
     }
     
     /**
-     * Removes a batch session from storage.
+     * Removes a batch session from storage and records completion in history.
+     * 
+     * <p><b>Thread Safety:</b> Uses write lock to ensure atomic removal.
+     * 
+     * @param batchId the batch identifier to remove
+     * @param status the completion status (COMPLETED or CANCELLED)
+     */
+    public void removeBatch(String batchId, BatchAudit.BatchStatus status) {
+        lock.writeLock().lock();
+        try {
+            BatchSession session = batches.remove(batchId);
+            if (session != null) {
+                int recordCount = session.getAllRecords().size();
+                batchHistory.add(new BatchAudit(batchId, Instant.now(), recordCount, status));
+                logger.info("Removed batch {}: status={}, records={}", batchId, status, recordCount);
+            } else {
+                logger.warn("Attempted to remove non-existent batch: {}", batchId);
+            }
+        } finally {
+            lock.writeLock().unlock();
+        }
+    }
+    
+    /**
+     * Removes a batch session from storage (legacy method).
+     * Records as COMPLETED by default.
      * 
      * <p><b>Thread Safety:</b> Uses write lock to ensure atomic removal.
      * 
@@ -125,11 +162,20 @@ public final class InMemoryBatchManager implements BatchManager {
      */
     @Override
     public void removeBatch(String batchId) {
-        lock.writeLock().lock();
+        removeBatch(batchId, BatchAudit.BatchStatus.COMPLETED);
+    }
+    
+    /**
+     * Retrieves the complete batch history.
+     * 
+     * @return unmodifiable list of all batch audit records
+     */
+    public List<BatchAudit> getBatchHistory() {
+        lock.readLock().lock();
         try {
-            batches.remove(batchId);
+            return Collections.unmodifiableList(new ArrayList<>(batchHistory));
         } finally {
-            lock.writeLock().unlock();
+            lock.readLock().unlock();
         }
     }
     

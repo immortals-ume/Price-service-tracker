@@ -7,7 +7,6 @@ import com.fintech.pricetracking.service.ConsumerService;
 import com.fintech.pricetracking.service.ProducerService;
 import com.fintech.pricetracking.service.PriceTrackingConsumerService;
 import com.fintech.pricetracking.service.PriceTrackingProducerService;
-import com.fintech.pricetracking.strategy.LatestAsOfPriceSelectionStrategy;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -32,8 +31,7 @@ class ConsumerServiceTest {
         PriceRepository priceRepository = new InMemoryPriceRepository();
         producer = new PriceTrackingProducerService(
             new InMemoryBatchManager(),
-            priceRepository,
-            new LatestAsOfPriceSelectionStrategy()
+            priceRepository
         );
         consumer = new PriceTrackingConsumerService(priceRepository);
         baseTime = Instant.now();
@@ -147,7 +145,7 @@ class ConsumerServiceTest {
     }
 
     @Test
-    void testGetLatestPriceWithCrossBatchOlderAsOfIsRejected() {
+    void testGetLatestPriceWithCrossBatchOlderAsOfKeepsLatest() {
         String batch1 = producer.startBatch();
         producer.uploadChunk(batch1, List.of(
             TestDataFactory.createPrice("AAPL", baseTime, 60, 160.0)  // Newer

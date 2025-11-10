@@ -9,7 +9,6 @@ import com.fintech.pricetracking.service.ConsumerService;
 import com.fintech.pricetracking.service.PriceTrackingConsumerService;
 import com.fintech.pricetracking.service.ProducerService;
 import com.fintech.pricetracking.service.PriceTrackingProducerService;
-import com.fintech.pricetracking.strategy.LatestAsOfPriceSelectionStrategy;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -34,8 +33,7 @@ class ProducerServiceTest {
     void setUp() {
         producer = new PriceTrackingProducerService(
             new InMemoryBatchManager(),
-            new InMemoryPriceRepository(),
-            new LatestAsOfPriceSelectionStrategy()
+            new InMemoryPriceRepository()
         );
         baseTime = Instant.now();
     }
@@ -190,6 +188,8 @@ class ProducerServiceTest {
             .hasMessageContaining("Batch not found");
     }
 
+
+
     @Test
     @DisplayName("Should successfully process multiple sequential batches independently")
     void testMultipleSequentialBatches() {
@@ -212,7 +212,7 @@ class ProducerServiceTest {
     @DisplayName("Should throw NullPointerException when constructing with null BatchManager")
     void testConstructorValidatesNullBatchManager() {
         assertThatThrownBy(() -> 
-            new PriceTrackingProducerService(null, new InMemoryPriceRepository(), new LatestAsOfPriceSelectionStrategy())
+            new PriceTrackingProducerService(null, new InMemoryPriceRepository())
         ).isInstanceOf(NullPointerException.class);
     }
 
@@ -220,15 +220,7 @@ class ProducerServiceTest {
     @DisplayName("Should throw NullPointerException when constructing with null PriceRepository")
     void testConstructorValidatesNullPriceRepository() {
         assertThatThrownBy(() -> 
-            new PriceTrackingProducerService(new InMemoryBatchManager(), null, new LatestAsOfPriceSelectionStrategy())
-        ).isInstanceOf(NullPointerException.class);
-    }
-
-    @Test
-    @DisplayName("Should throw NullPointerException when constructing with null PriceSelectionStrategy")
-    void testConstructorValidatesNullPriceSelectionStrategy() {
-        assertThatThrownBy(() -> 
-            new PriceTrackingProducerService(new InMemoryBatchManager(), new InMemoryPriceRepository(), null)
+            new PriceTrackingProducerService(new InMemoryBatchManager(), null)
         ).isInstanceOf(NullPointerException.class);
     }
 
@@ -238,7 +230,7 @@ class ProducerServiceTest {
     void testSameBatchMultipleChunksSelectsLatestAsOf() {
         InMemoryPriceRepository sharedRepo = new InMemoryPriceRepository();
         ProducerService prod = new PriceTrackingProducerService(
-            new InMemoryBatchManager(), sharedRepo, new LatestAsOfPriceSelectionStrategy()
+            new InMemoryBatchManager(), sharedRepo
         );
         ConsumerService cons = new PriceTrackingConsumerService(sharedRepo);
         
@@ -259,7 +251,7 @@ class ProducerServiceTest {
     void testCrossBatchUpdateWithNewerAsOf() {
         InMemoryPriceRepository sharedRepo = new InMemoryPriceRepository();
         ProducerService prod = new PriceTrackingProducerService(
-            new InMemoryBatchManager(), sharedRepo, new LatestAsOfPriceSelectionStrategy()
+            new InMemoryBatchManager(), sharedRepo
         );
         ConsumerService cons = new PriceTrackingConsumerService(sharedRepo);
         
@@ -275,11 +267,11 @@ class ProducerServiceTest {
     }
 
     @Test
-    @DisplayName("Should reject cross-batch update when new batch has older asOf timestamp")
-    void testCrossBatchUpdateWithOlderAsOfIsRejected() {
+    @DisplayName("Should keep latest asOf when new batch has older asOf timestamp")
+    void testCrossBatchUpdateWithOlderAsOfKeepsLatest() {
         InMemoryPriceRepository sharedRepo = new InMemoryPriceRepository();
         ProducerService prod = new PriceTrackingProducerService(
-            new InMemoryBatchManager(), sharedRepo, new LatestAsOfPriceSelectionStrategy()
+            new InMemoryBatchManager(), sharedRepo
         );
         ConsumerService cons = new PriceTrackingConsumerService(sharedRepo);
         
