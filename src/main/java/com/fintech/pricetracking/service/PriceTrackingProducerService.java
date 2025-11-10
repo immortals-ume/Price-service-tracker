@@ -1,8 +1,10 @@
 package com.fintech.pricetracking.service;
 
 import com.fintech.pricetracking.batch.BatchManager;
+import com.fintech.pricetracking.batch.InMemoryBatchManager;
 import com.fintech.pricetracking.exception.InvalidBatchOperationException;
 import com.fintech.pricetracking.exception.InvalidChunkSizeException;
+import com.fintech.pricetracking.model.BatchAudit;
 import com.fintech.pricetracking.model.PriceRecord;
 import com.fintech.pricetracking.repository.PriceRepository;
 import org.slf4j.Logger;
@@ -134,9 +136,9 @@ public class PriceTrackingProducerService implements ProducerService {
         
         logger.info("Cancelling batch: {}", batchId);
         
-        if (batchManager instanceof com.fintech.pricetracking.batch.InMemoryBatchManager) {
-            ((com.fintech.pricetracking.batch.InMemoryBatchManager) batchManager)
-                .removeBatch(batchId, com.fintech.pricetracking.model.BatchAudit.BatchStatus.CANCELLED);
+        if (batchManager instanceof InMemoryBatchManager) {
+            ((InMemoryBatchManager) batchManager)
+                .removeBatch(batchId, BatchAudit.BatchStatus.CANCELLED);
         } else {
             batchManager.removeBatch(batchId);
         }
