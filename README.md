@@ -109,43 +109,74 @@ Map<String, List<PriceRecord>>
 
 ## Design Decisions
 
-### 1. History-Based Storage
-**Decision:** Store ALL prices per instrument, return latest
+### 1. Complete History Storage
+**Decision:** Store ALL price records without filtering
 
 **Why:** 
-- Enables auditing and compliance
-- Supports historical analysis
-- Consumer API unchanged (still gets latest)
-- Repository: `Map<InstrumentId, List<PriceRecord>>` sorted by asOf (newest first)
-- No filtering - full audit trail preserved
+- Full audit trail for compliance
+- Historical analysis capability
+- Repository maintains sorted history per instrument
+- Consumer gets latest automatically (first in sorted list)
+- Simple, no complex filtering logic needed
 
-### 2. Past Timestamps
-**Decision:** Use past timestamps (`.minusSeconds()`) in tests and demo
+**Implementation:**
+- `saveAllRecords(List<PriceRecord>)` - saves everything
+- Repository: `Map<InstrumentId, List<PriceRecord>>` sorted by asOf (newest first)
+- Consumer: `findByInstrumentId()` returns `list.get(0)` - O(1)
+
+### 2. Sequential Chunk Upload
+**Decision:** Synchronous, sequential chunk uploads
 
 **Why:**
-- Realistic - prices determined in the past, not future
-- Demo: `now.minusSeconds(30)` = 30 seconds ago
-- Tests: Use `TestDataFactory` for consistent past timestamps
+- Simpler implementation and testing
+- Thread-safe with locks
+- Meets all business requirements
+- No async complexity needed
+- Easier to debug and maintain
 
-### 3. Atomic Batch Completion
+### 3. Batch Audit Trail
+**Decision:** Track all completed and cancelled batches
+
+**Why:**
+- Compliance and monitoring
+- Debugging capability
+- Performance metrics (record counts)
+- Status tracking (COMPLETED/CANCELLED)
+
+**Implementation:**
+- `BatchManager.removeBatch(batchId, boolean cancelled)`
+- Stores `BatchAudit` records in history list
+- Accessible via `getBatchHistory()`
+
+### 4. Atomic Batch Completion
 **Decision:** All prices in batch visible simultaneously
 
 **Implementation:**
-- `saveAll()` uses write lock
+- `saveAllRecords()` uses write lock
 - Consumers blocked during write
 - See all prices or none
 
 **Why:** Business requirement - "all prices should be made available at the same time"
 
-### 4. Thread Safety (ReadWriteLock)
+### 5. Thread Safety (ReadWriteLock)
 **Decision:** Use ReadWriteLock instead of synchronized
 
 **Why:**
 - Multiple concurrent reads (no blocking)
 - Exclusive writes (atomic updates)
 - Better performance for read-heavy workloads
+- Proper separation of read/write operations
 
-### 5. Separated Producer/Consumer Services
+### 6. Interface Abstraction (No instanceof)
+**Decision:** Use interface methods, avoid implementation checks
+
+**Why:**
+- Dependency Inversion Principle (DIP)
+- No coupling to specific implementations
+- `BatchManager.removeBatch(batchId, boolean cancelled)` in interface
+- Clean, testable code
+
+### 7. Separated Producer/Consumer Services
 **Decision:** Two separate service interfaces
 
 **Why:**
@@ -154,14 +185,14 @@ Map<String, List<PriceRecord>>
 - Consumers don't need producer methods
 - Clear separation of concerns
 
-### 6. TestDataFactory Utility
-**Decision:** Centralize test data creation
+### 8. Comprehensive Logging
+**Decision:** SLF4J + Logback with INFO/DEBUG/ERROR levels
 
 **Why:**
-- DRY principle - no duplication
-- Consistent past timestamps across tests
-- Easy to maintain and update
-- Single source of truth for test data
+- Production observability
+- Debugging capability
+- Performance monitoring
+- Audit trail in logs
 
 ## Architecture
 
